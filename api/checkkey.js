@@ -1,24 +1,23 @@
 const express = require("express");
 const router = express.Router();
-const pool = require("../db");
+const { getKeys, updateKeys } = require("../github");
 
 router.use(express.json());
 
 router.all("/", async (req, res) => {
-  const key = req.query.key || req.body.key;
-  const hwid = req.body.hwid || null;
-
-  if (!key) return res.status(400).json({ error: "Missing key" });
-
   try {
-    const result = await pool.query("SELECT * FROM keys WHERE key=$1", [key]);
-    if (result.rows.length === 0) return res.status(404).json({ error: "Key not found" });
+    const key = req.query.key || req.body.key;
+    const hwid = req.body.hwid || null;
+    if (!key) return res.status(400).json({ error: "Missing key" });
 
-    const keyData = result.rows[0];
+    const { keys, sha } = await getKeys();
+    const index = keys.findIndex(k => k.key === key);
+    if (index === -1) return res.status(404).json({ error: "Key not found" });
+
+    const keyData = keys[index];
     const now = Math.floor(Date.now() / 1000);
     const tempRemaining = keyData.created_at + keyData.duration - now;
 
-    // Key expirada
     if (tempRemaining <= 0) {
       return res.json({
         Key: keyData.key,
@@ -29,13 +28,14 @@ router.all("/", async (req, res) => {
       });
     }
 
-    // Associar HWID se estiver null e se enviado no POST
+    // POST → associar HWID
     if (req.method === "POST") {
       if (!hwid) return res.status(400).json({ error: "Missing hwid in POST" });
 
       if (!keyData.hwid) {
-        await pool.query("UPDATE keys SET hwid=$1 WHERE key=$2", [hwid, key]);
         keyData.hwid = hwid;
+        keys[index] = keyData;
+        await updateKeys(keys, sha, `Associate HWID for ${key}`);
         return res.json({
           Key: keyData.key,
           Hwid: hwid,
@@ -63,8 +63,8 @@ router.all("/", async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Database error" });
+    console.error("Erro checkkey:", err.message);
+    res.status(500).json({ error: "Erro interno do servidor" });
   }
 });
 
