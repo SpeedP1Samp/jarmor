@@ -3,7 +3,7 @@ const axios = require("axios");
 const REPO = "SpeedP1Samp/db";
 const FILE_PATH = "keys.json";
 const BRANCH = "main";
-const TOKEN = process.env.GITHUB_TOKEN;
+const TOKEN = "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";
 
 const githubApi = axios.create({
   baseURL: "https://api.github.com",
